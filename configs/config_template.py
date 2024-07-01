@@ -13,14 +13,15 @@ GeneralConf=dict()
 
 GeneralConf['ExpName'] ='fancy_and_overexplicative_name'                       # Experiment name
 GeneralConf['ExpPath'] = f"path/to/expdir/{GeneralConf['ExpName']}"            # path to the experiment
+GeneralConf['FortranRoutinesPath'] = 'Path/to/fortran/routines/'               # path to the compiled fortran routines
 GeneralConf['NewExperiment'] = True
-GeneralConf['NewExperiment'] = True
-GeneralConf['NewExperiment'] = True
-GeneralConf['NewExperiment'] = True
+GeneralConf['RunNature'] = True
+GeneralConf['RunDA'] = True
+GeneralConf['RunPlots'] = True
 
 
 #=============================================================================#
-#                                MODEL SECTION                                #
+#                                NATURE SECTION                                #
 #=============================================================================#
 #General model section
 
@@ -28,8 +29,8 @@ ModelConf=dict()
 
 #General model section
 
-ModelConf['nx'] =  40                                   #Number of large-scale state variables
-ModelConf['dt']  =0.0125                                #Time step for large-scale variables (do not change)
+ModelConf['nx'] = 40                                   #Number of large-scale state variables
+ModelConf['dt'] = 0.0125                               #Time step for large-scale variables (do not change)
 
 #Forcing section
 
