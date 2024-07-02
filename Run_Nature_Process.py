@@ -1,206 +1,168 @@
 # -*- coding: utf-8 -*-
 '''
-Nature run create the observations of the  
+Nature run to create observations
 '''
 
 import sys
-sys.path.append('../model/')
-sys.path.append('../data_assimilation/')
-
-from model   import lorenzn as model          #Import the model (fortran routines)
-from obsope  import common_obs as hoperator      #Import the observation operator (fortran routines)
-
-import matplotlib.pyplot as plt
+import os
+import time
 import numpy as np
 from scipy import stats
-import time
-import os
+import matplotlib.pyplot as plt
 
-def initialize
+sys.path.append('../model/')
+sys.path.append('../data_assimilation/')
+from model import lorenzn as model          # Import the model (fortran routines)
+from obsope import common_obs as hoperator  # Import the observation operator (fortran routines)
+
+def initialize_nature_run(conf):
+    GeneralConf = conf['GeneralConf']
+    ModelConf = conf['ModelConf']
+    NatureConf = conf['NatureConf']
+
+    sys.path.append(f"{GeneralConf['FortranRoutinesPath']}/model/")
+    sys.path.append(f"{GeneralConf['FortranRoutinesPath']}/data_assimilation/")
+    from model import lorenzn as model
+    from obsope import common_obs as hoperator
+
+    return GeneralConf, ModelConf, NatureConf
+
+def run_spin_up(ModelConf, NatureConf, NEns, NCoef, Nx, NxSS, X0, XSS0, RF0, CRF0, C0, XPhi, XSigma, CPhi, CSigma):
+    print('Doing Spinup')
+    start = time.time()
+    
+    nt = int(NatureConf['SPLength'] / ModelConf['dt'])
+    ntout = 2
+
+    spin_up_out = model.tinteg_rk4(
+        nens=1, nt=nt, ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0,
+        phi=XPhi, sigma=XSigma, c0=C0, crf0=CRF0, cphi=CPhi,
+        csigma=CSigma, param=ModelConf['TwoScaleParameters'],
+        nx=Nx, ncoef=NCoef, dt=ModelConf['dt'], dtss=ModelConf['dtss']
+    )
+    
+    [XSU, XSSSU, DFSU, RFSU, SSFSU, CRFSU, CSU] = spin_up_out   
+    print('Spinup took', time.time() - start, 'seconds.')
+    
+    return XSU, XSSSU, DFSU, RFSU, SSFSU, CRFSU, CSU
+
+def run_nature(ModelConf, NatureConf, ObsConf, XSU, XSSSU, RFSU, CRFSU, NEns, NCoef, Nx, NxSS, XPhi, XSigma, CPhi, CSigma):
+    print('Doing Nature Run')
+    start = time.time()
+    
+    X0 = XSU[:, :, -1]
+    XSS0 = XSSSU[:, :, -1]
+    CRF0 = CRFSU[:, :, -1]
+    RF0 = RFSU[:, :, -1]
+
+    nt = int(NatureConf['Length'] / ModelConf['dt'])
+    ntout = int(nt / ObsConf['Freq']) + 1
+
+    nature_out = model.tinteg_rk4(
+        nens=1, nt=nt, ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0,
+        phi=XPhi, sigma=XSigma, c0=C0, crf0=CRF0, cphi=CPhi,
+        csigma=CSigma, param=ModelConf['TwoScaleParameters'],
+        nx=Nx, ncoef=NCoef, dt=ModelConf['dt'], dtss=ModelConf['dtss']
+    )
+
+    [XNature, XSSNature, DFNature, RFNature, SSFNature, CRFNature, CNature] = nature_out
+    print('Nature run took', time.time() - start, 'seconds.')
+
+    return XNature, XSSNature, DFNature, RFNature, SSFNature, CRFNature, CNature
+
+def generate_observations(ModelConf, ObsConf, XNature, Nx, ntout):
+    print('Generating Observations')
+    start = time.time()
+
+    NObs = hoperator.get_obs_number(
+        ntype=ObsConf['NetworkType'], nx=Nx, nt=ntout,
+        space_density=ObsConf['SpaceDensity'],
+        time_density=ObsConf['TimeDensity']
+    )
+
+    ObsLoc = hoperator.get_obs_location(
+        ntype=ObsConf['NetworkType'], nx=Nx, nt=ntout, no=NObs,
+        space_density=ObsConf['SpaceDensity'],
+        time_density=ObsConf['TimeDensity']
+    )
+
+    ObsType = np.ones(np.shape(ObsLoc)[0]) * ObsConf['Type']
+    TLoc = np.arange(1, ntout + 1)
+
+    YObs, YObsMask = hoperator.model_to_obs(
+        nx=Nx, no=NObs, nt=ntout, nens=1,
+        obsloc=ObsLoc, x=XNature, obstype=ObsType,
+        obsval=np.zeros(NObs), obserr=np.ones(NObs),
+        xloc=ModelConf['XLoc'], tloc=TLoc,
+        gross_check_factor=1.0e9, low_dbz_per_thresh=1.1
+    )
+
+    ObsLoc[:, 1] = (ObsLoc[:, 1] - 1) * ObsConf['Freq']
+    ObsError = np.ones(np.shape(YObs)) * ObsConf['Error']
+    ObsBias = np.ones(np.shape(YObs)) * ObsConf['Bias']
+
+    YObs = hoperator.add_obs_error(
+        no=NObs, nens=1, obs=YObs, obs_error=ObsError,
+        obs_bias=ObsBias, otype=ObsConf['Type']
+    )
+
+    print('Observations took', time.time() - start, 'seconds.')
+    
+    return YObs, ObsLoc, ObsType, ObsError
+
+def save_output(GeneralConf, NatureConf, XNature, XSSNature, DFNature, RFNature, SSFNature, CNature, YObs, NObs, ObsLoc, ObsType, ObsError):
+    if NatureConf['RunSave']:
+        FNature = DFNature + RFNature + SSFNature
+        
+        filename = os.path.join(GeneralConf['DataPath'], GeneralConf['NatureFileName'])
+        print('Saving the output to ' + filename)
+        start = time.time()
+
+        os.makedirs(GeneralConf['DataPath'], exist_ok=True)
+
+        np.savez(
+            filename, XNature=XNature, FNature=FNature, CNature=CNature,
+            YObs=YObs, NObs=NObs, ObsLoc=ObsLoc, ObsType=ObsType,
+            ObsError=ObsError, ModelConf=ModelConf, NatureConf=NatureConf,
+            GeneralConf=GeneralConf, XSSNature=XSSNature
+        )
+
+        fileout = os.path.join(GeneralConf['DataPath'], 'XNature.csv')
+        np.savetxt(fileout, np.transpose(np.squeeze(XNature)), fmt="%6.2f", delimiter=",")
+
+        fileout = os.path.join(GeneralConf['DataPath'], 'XSSNature.csv')
+        np.savetxt(fileout, np.transpose(np.squeeze(XSSNature)), fmt="%6.2f", delimiter=",")
+        
+        print('Saving took', time.time() - start, 'seconds.')
+
 def Run_Nature_Process(conf):
-	#=================================================================
-	# LOAD CONFIGURATION : 
-	#=================================================================
-	
-	GeneralConf=conf.GeneralConf
-	ModelConf  =conf.ModelConf
-	ObsConf    =conf.ObsConf
-	NatureConf =conf.NatureConf
-	
-	sys.path.append(f"{GeneralConf['FortranRoutinesPath']}/model/")
-	sys.path.append(f"{GeneralConf['FortranRoutinesPath']}/data_assimilation/")
-	from model   import lorenzn as model          #Import the model (fortran routines)
-	from obsope  import common_obs as hoperator      #Import the observation operator (fortran routines)
+    GeneralConf, ModelConf, NatureConf = initialize_nature_run(conf)
 
-	#=================================================================
-	# INITIALIZATION : 
-	#=================================================================
-	
-	NCoef=ModelConf['NCoef']  #Get the number of parameters
-	NEns=NatureConf['NEns']   #Get the number of ensembles
-	Nx=ModelConf['nx']        #Get the size of the large-scale state
-	NxSS=ModelConf['nxss']    #Get the size of the small-scale state
-
-	#Initialize model configuration, parameters and state variables.
-	if not ModelConf['EnableSRF']:
-	  XSigma = 0.0
-	  XPhi = 1.0
-	else:
-	  XSigma = ModelConf['XSigma']
-	  XPhi  = ModelConf['XPhi']
-
-	if not ModelConf['EnablePRF']:
-	  CSigma = np.zeros(NCoef)
-	  CPhi = 1.0
-	else:
-	  CSigma = ModelConf['CSigma']
-	  CPhi = ModelConf['CPhi']
-
-	if not ModelConf['FSpaceDependent'] :
-	  FSpaceAmplitude = np.zeros(NCoef) 
-	else                   :
-	  FSpaceAmplitude = ModelConf['FSpaceAmplitude']
-
-	FSpaceFreq = ModelConf['FSpaceFreq']
-
-	CRF0 = np.zeros([NEns,NCoef])
-	RF0 = np.zeros([Nx,NEns])
-
-	X0 = np.zeros((Nx,NEns))
-	XSS0 = np.zeros((NxSS,NEns))
-	C0 = np.zeros((Nx,NEns,NCoef))
-
-	#Generate a random initial conditions and initialize deterministic parameters
-	for ie in range(0,NEns):
-	   X0[:,ie] = ModelConf['Coef'][0]/2 + np.random.normal( size=Nx )
-	   for ic in range(0,NCoef) :
-	      C0[:,ie,ic] = ModelConf['Coef'][ic] + FSpaceAmplitude[ic]*np.cos( FSpaceFreq[ic]*2*np.pi*np.arange(0,Nx)/Nx )
-
-	#=================================================================
-	# RUN SPIN UP : 
-	#=================================================================
-
-	#Do spinup
-	print('Doing Spinup')
-	start = time.time()
-
-	 
-	nt=int( NatureConf['SPLength'] / ModelConf['dt'] )    #Number of time steps to be performed.
-	ntout=int( 2 )                       #Output only the last time.
-
-	#Runge Kuta 4 integration of the LorenzN equations
-	spin_up_out = model.tinteg_rk4(nens=1, nt=nt,  ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0, 
-	                               phi=XPhi, sigma=XSigma, c0=C0, crf0=CRF0, cphi=CPhi, 
-	                               csigma=CSigma, param=ModelConf['TwoScaleParameters'], 
-	                               nx=Nx, ncoef=NCoef, dt=ModelConf['dt'], dtss=ModelConf['dtss'])
-	                               
-	[XSU , XSSSU , DFSU , RFSU , SSFSU , CRFSU , CSU ] = spin_up_out   
-	print('Spinup up took', time.time()-start, 'seconds.')
-
-	#=================================================================
-	# RUN NATURE : 
-	#=================================================================
-
-	#Run nature
-	print('Doing Nature Run')
-	start = time.time()
-
-	X0=XSU[:,:,-1]                  #Start large scale variables from the last time of the spin up run.
-	XSS0=XSSSU[:,:,-1]              #Start small scale variables from the last time of the sipin up run.  
-	CRF0=CRFSU[:,:,-1]              #Spin up for the random forcing for the parameters   
-	RF0=RFSU[:,:,-1]                #Spin up for the random forcing for the state variables
-
-
-	nt=int( NatureConf['Length'] / ModelConf['dt'] )                     #Number of time steps to be performed.
-	ntout=int( nt / ObsConf['Freq'] )  + 1                               #Output the state every ObsFreq time steps.
-
-
-	#Runge Kuta 4 integration of the LorenzN equations.
-	nature_out=model.tinteg_rk4(nens=1, nt=nt,  ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0, 
-	                            phi=XPhi, sigma=XSigma, c0=C0, crf0=CRF0, cphi=CPhi, 
-	                            csigma=CSigma, param=ModelConf['TwoScaleParameters'], 
-	                            nx=Nx, ncoef=NCoef, dt=ModelConf['dt'], dtss=ModelConf['dtss'])
-
-        [XNature , XSSNature , DFNature , RFNature , SSFNature , CRFNature , CNature ] = nature_out
-	print('Nature run took', time.time()-start, 'seconds.')
-
-	#=================================================================
-	# GENERATE OBSERVATIONS : 
-	#=================================================================
-
-	#Apply h operator and transform from model space to observation spaece.
-	print('Generating Observations')
-	start = time.time()
-
-	#Get the total number of observations
-	NObs = hoperator.get_obs_number(ntype=ObsConf['NetworkType'], nx=Nx, nt=ntout,
-		                        space_density=ObsConf['SpaceDensity'],
-		                        time_density =ObsConf['TimeDensity'] )
-
-	#Get the space time location of the observations based on the network type and 
-	#observation density parameters.
-	ObsLoc = hoperator.get_obs_location( ntype=ObsConf['NetworkType'] , nx=Nx , nt=ntout , no=NObs ,
-		                              space_density=ObsConf['SpaceDensity']  , 
-		                              time_density =ObsConf['TimeDensity'] )
-
-	#Assume that all observations are of the same type.
-	ObsType=np.ones( np.shape(ObsLoc)[0] )*ObsConf['Type']
-
-	#Set the time coordinate corresponding to the model output.
-	TLoc=np.arange(1,ntout+1)
-
-	#Get the observed value (without observation error)
-	[YObs , YObsMask]=hoperator.model_to_obs( nx=Nx   , no=NObs   , nt=ntout , nens=1    ,
-		                              obsloc=ObsLoc , x=XNature , obstype=ObsType    ,
-		                              obsval=np.zeros(NObs) , obserr=np.ones(NObs)   ,
-		                              xloc=ModelConf['XLoc']    , tloc= TLoc         ,
-		                              gross_check_factor = 1.0e9 , low_dbz_per_thresh = 1.1 )
-
-	#Get the time reference in number of time step since nature run starts.
-	ObsLoc[:,1]=( ObsLoc[:,1] - 1 )*ObsConf['Freq']
-
-	#Add a Gaussian random noise to simulate observation errors
-	ObsError=np.ones( np.shape(YObs) )*ObsConf['Error']
-	ObsBias =np.ones( np.shape(YObs) )*ObsConf['Bias']
-
-
-	YObs = hoperator.add_obs_error(no=NObs ,  nens=1  ,  obs=YObs  ,  obs_error=ObsError  ,
-		                       obs_bias=ObsBias , otype = ObsConf['Type'] ) 
-
-	print('Observations took', time.time()-start, 'seconds.')
-
-	#=================================================================
-	# SAVE THE OUTPUT : 
-	#=================================================================
-
-	if NatureConf['RunSave']   :
-	    
-	   FNature = DFNature + RFNature + SSFNature  #Total Nature forcing.
-	    
-	   filename=GeneralConf['DataPath'] + '/' + GeneralConf['NatureFileName']
-	   print('Saving the output to ' +  filename  )
-	   start = time.time()
-	    
-	   if not os.path.exists( GeneralConf['DataPath'] + '/' )  : 
-	      os.makedirs(  GeneralConf['DataPath'] + '/'  )
-
-	   #Save Nature run output
-	   np.savez( filename ,   XNature=XNature       , FNature=FNature
-		              ,   CNature=CNature       
-		              ,   YObs=YObs , NObs=NObs , ObsLoc=ObsLoc   
-		              ,   ObsType=ObsType       , ObsError=ObsError 
-		              ,   ModelConf=ModelConf   , NatureConf=NatureConf 
-		              ,   ObsConf=ObsConf       , GeneralConf=GeneralConf 
-		              ,   XSSNature=XSSNature )
-	   
-	   
-	   #Print XNature and XSSNature as a CSV
-	   fileout=GeneralConf['DataPath'] + '/XNature.csv' 
-	   np.savetxt(fileout, np.transpose( np.squeeze( XNature ) ), fmt="%6.2f", delimiter=",")
-	   #np.squeeze(XNature).tofile(fileout,sep=',',format='%6.2f' , newline='\n' )
-
-	   #Print XNature and XSSNature as a CSV
-	   fileout=GeneralConf['DataPath'] + '/XSSNature.csv' 
-	   np.savetxt(fileout, np.transpose( np.squeeze( XSSNature ) ), fmt="%6.2f", delimiter=",")
-
-	   print('Saving took ', time.time()-start, 'seconds.')
+    NCoef = ModelConf['NCoef']
+    NEns = NatureConf['NEns']
+    Nx = ModelConf['nx']
+    NxSS = ModelConf['nxss']
+    
+    XSigma = ModelConf['XSigma'] if ModelConf['EnableSRF'] else 0.0
+    XPhi = ModelConf['XPhi'] if ModelConf['EnableSRF'] else 1.0
+    CSigma = ModelConf['CSigma'] if ModelConf['EnablePRF'] else np.zeros(NCoef)
+    CPhi = ModelConf['CPhi'] if ModelConf['EnablePRF'] else 1.0
+    FSpaceAmplitude = ModelConf['FSpaceAmplitude'] if ModelConf['FSpaceDependent'] else np.zeros(NCoef)
+    FSpaceFreq = ModelConf['FSpaceFreq']
+    
+    CRF0 = np.zeros([NEns, NCoef])
+    RF0 = np.zeros([Nx, NEns])
+    X0 = np.zeros((Nx, NEns))
+    XSS0 = np.zeros((NxSS, NEns))
+    C0 = np.zeros((Nx, NEns, NCoef))
+    
+    for ie in range(NEns):
+        X0[:, ie] = ModelConf['Coef'][0] / 2 + np.random.normal(size=Nx)
+        for ic in range(NCoef):
+            C0[:, ie, ic] = ModelConf['Coef'][ic] + FSpaceAmplitude[ic] * np.cos(FSpaceFreq[ic] * 2 * np.pi * np.arange(Nx) / Nx)
+    
+    XSU, XSSSU, DFSU, RFSU, SSFSU, CRFSU, CSU = run_spin_up(
+        ModelConf, NatureConf, NEns, NCoef, Nx, NxSS, X0, XSS0, RF0, CRF0, C0, XPhi, XSigma, CPhi, CSigma
+    )
+    
+    XNature, XSSNature, DFNature, RFNature, SSFNature
