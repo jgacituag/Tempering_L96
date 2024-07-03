@@ -7,9 +7,7 @@ import os
 import shutil
 import logging
 import itertools
-import os
 import json
-import logging
 
 def generate_combinations(config):
     keys, values = zip(*[(k, v) for k, v in config.ModelConf.items() if isinstance(v, (list, np.ndarray))])
@@ -20,7 +18,7 @@ def generate_combinations(config):
     return combinations
 
 def save_configurations(combinations, base_path):
-    combo_file = os.path.j<oin(base_path, "combinations.csv")
+    combo_file = os.path.join(base_path, "combinations.csv")
     with open(combo_file, 'w') as f:
         for combo in combinations:
             f.write(f"{combo['name']},{json.dumps(combo)}\n")

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-'''
-Run data assimilation process using the model worflot
-'''
+
+sys.path.append('../model/')
+sys.path.append('../data_assimilation/')
+from model import worflot as model          # Import the model (fortran routines)
+from obsope import common_obs as hoperator  # Import the observation operator (fortran routines)
 
 import sys
 import os
@@ -10,10 +12,6 @@ import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 
-sys.path.append('../model/')
-sys.path.append('../data_assimilation/')
-from model import worflot as model          # Import the model (fortran routines)
-from obsope import common_obs as hoperator  # Import the observation operator (fortran routines)
 
 def initialize_da_run(conf):
     GeneralConf = conf['GeneralConf']
@@ -135,7 +133,7 @@ def save_output(GeneralConf, DAConf, XDA, XSSDA, DFDA, RFDA, SSFDA, CDA, YObs, N
         
         print('Saving took', time.time() - start, 'seconds.')
 
-def Run_DA_Process(conf):
+def run_da_process(conf):
     GeneralConf, DAConf, ModelConf = initialize_da_run(conf)
 
     NCoef = ModelConf['NCoef']
@@ -166,4 +164,4 @@ def Run_DA_Process(conf):
     )
     
     XDA, XSSDA, DFDA, RFDA, SSFDA, CRFDA, CDA = run_da(
-        ModelConf, DAConf, ObsConf, XSU, XSSSU, RFS
+        ModelConf, DAConf, ObsConf, XSU, XSSSU, RFS)
