@@ -3,9 +3,13 @@
 Nature run to create observations
 '''
 import os
+import sys
 import time
-import numpy as np
 import logging
+import numpy as np
+import experiment_config as expconf
+sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/model/")
+sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/data_assimilation/")
 from model import lorenzn as model
 from obsope import common_obs as hoperator
 
@@ -85,7 +89,7 @@ def save_output(GeneralConf, NatureConf,ModelConf, ObsConf, XNature, XSSNature, 
     if NatureConf['RunSave']:
         FNature = DFNature + RFNature + SSFNature
         
-        filename = os.path.join(GeneralConf['DataPath'], GeneralConf['NatureFileName'])
+        filename = os.path.join(GeneralConf['DataPath'], NatureConf['NatureFileName'])
         logging.info('Saving the output to ' + filename)
         start = time.time()
 
@@ -108,10 +112,10 @@ def run_nature_process(conf):
     '''
     main function to run the nature process
     '''
-    GeneralConf = conf['GeneralConf']
-    ModelConf = conf['ModelConf']
-    NatureConf = conf['NatureConf']
-    ObsConf = conf['ObsConf']
+    GeneralConf = conf.GeneralConf
+    ModelConf = conf.ModelConf
+    NatureConf = conf.NatureConf
+    ObsConf = conf.ObsConf
 
     NCoef = ModelConf['NCoef']
     NEns = NatureConf['NEns']

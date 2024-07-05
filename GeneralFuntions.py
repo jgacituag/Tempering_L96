@@ -2,7 +2,7 @@
 '''
 General Funtions to handle directories, logs and configurations
 '''
-
+import numpy as np
 import os
 import shutil
 import logging
@@ -23,7 +23,6 @@ def save_configurations(combinations, base_path):
         for combo in combinations:
             f.write(f"{combo['name']},{json.dumps(combo)}\n")
     logging.info("Saved configuration combinations to %s", combo_file)
-
 
 def create_and_change_directory(path, reset=False):
     if reset and os.path.exists(path):

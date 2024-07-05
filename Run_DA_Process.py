@@ -1,29 +1,62 @@
 # -*- coding: utf-8 -*-
 
-sys.path.append('../model/')
-sys.path.append('../data_assimilation/')
-from model import worflot as model          # Import the model (fortran routines)
-from obsope import common_obs as hoperator  # Import the observation operator (fortran routines)
-
 import sys
 import os
 import time
 import numpy as np
 from scipy import stats
-import matplotlib.pyplot as plt
+import experiment_config as expconf
+sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/model/")
+sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/data_assimilation/")
+from model  import lorenzn          as model          #Import the model (fortran routines)
+from obsope import common_obs       as hoperator      #Import the observation operator (fortran routines)
+from da     import common_da_tools  as das            #Import the data assimilation routines (fortran routines)
 
 
-def initialize_da_run(conf):
-    GeneralConf = conf['GeneralConf']
-    DAConf = conf['DAConf']
-    ModelConf = conf['ModelConf']
+def inflation( ensemble_post , ensemble_prior , nature , inf_coefs )  :
 
-    sys.path.append(f"{GeneralConf['FortranRoutinesPath']}/model/")
-    sys.path.append(f"{GeneralConf['FortranRoutinesPath']}/data_assimilation/")
-    from model import worflot as model
-    from obsope import common_obs as hoperator
+   #This function consideres inflation approaches that are applied after the analysis. In particular when these approaches
+   #are used in combination with tempering.
+   DALength = nature.shape[2] - 1
+   NEns = ensemble_post.shape[1]
 
-    return GeneralConf, DAConf, ModelConf
+   if inf_coefs[5] > 0.0 :
+     #=================================================================
+     #  RTPS  : Relaxation to prior spread (compatible with tempering iterations) 
+     #=================================================================
+     prior_spread = np.std( ensemble_prior , axis=1 )
+     post_spread  = np.std( ensemble_post  , axis=1 )
+     PostMean = np.mean( ensemble_post , axis=1 )
+     EnsPert = ensemble_post - np.repeat( PostMean[:,np.newaxis] , NEns , axis=1 )
+     inf_factor = ( 1.0 - inf_coefs[5] ) + ( prior_spread / post_spread ) * inf_coefs[5]
+     EnsPert = EnsPert * np.repeat( inf_factor[:,np.newaxis] , NEns , axis=1 )
+     ensemble_post = EnsPert + np.repeat( PostMean[:,np.newaxis] , NEns , axis=1 )
+
+   if inf_coefs[6] > 0.0 :
+     #=================================================================
+     #  RTPP  : Relaxation to prior perturbations (compatible with tempering iterations) 
+     #=================================================================
+     PostMean = np.mean( ensemble_post , axis=1 )
+     PriorMean= np.mean( ensemble_prior, axis=1 )
+     PostPert = ensemble_post - np.repeat( PostMean[:,np.newaxis] , NEns , axis=1 )
+     PriorPert= ensemble_prior- np.repeat( PriorMean[:,np.newaxis] , NEns , axis=1 )
+     PostPert = (1.0 - inf_coefs[6] ) * PostPert + inf_coefs[6] * PriorPert 
+     ensemble_post = PostPert + np.repeat( PostMean[:,np.newaxis] , NEns , axis=1 ) 
+
+   if inf_coefs[4] > 0.0 :
+     #=================================================================
+     #  ADD ADDITIVE ENSEMBLE PERTURBATIONS  : 
+     #=================================================================
+     #Additive perturbations will be generated as scaled random
+     #differences of nature run states.
+     #Get random index to generate additive perturbations
+     RandInd1=(np.round(np.random.rand(NEns)*DALength)).astype(int)
+     RandInd2=(np.round(np.random.rand(NEns)*DALength)).astype(int)
+     AddInfPert = np.squeeze( nature[:,0,RandInd1] - nature[:,0,RandInd2] ) * inf_coefs[4]
+     #Shift perturbations to obtain zero-mean perturbations and add it to the ensemble.
+     ensemble_post = ensemble_post + AddInfPert - np.repeat( np.mean(AddInfPert,1)[:,np.newaxis] , NEns , axis=1 )
+
+   return ensemble_post
 
 def run_spin_up(ModelConf, DAConf, NEns, NCoef, Nx, NxSS, X0, XSS0, RF0, CRF0, C0, XPhi, XSigma, CPhi, CSigma):
     print('Doing Spinup')
@@ -68,45 +101,6 @@ def run_da(ModelConf, DAConf, ObsConf, XSU, XSSSU, RFSU, CRFSU, NEns, NCoef, Nx,
 
     return XDA, XSSDA, DFDA, RFDA, SSFDA, CRFDA, CDA
 
-def generate_observations(ModelConf, ObsConf, XDA, Nx, ntout):
-    print('Generating Observations')
-    start = time.time()
-
-    NObs = hoperator.get_obs_number(
-        ntype=ObsConf['NetworkType'], nx=Nx, nt=ntout,
-        space_density=ObsConf['SpaceDensity'],
-        time_density=ObsConf['TimeDensity']
-    )
-
-    ObsLoc = hoperator.get_obs_location(
-        ntype=ObsConf['NetworkType'], nx=Nx, nt=ntout, no=NObs,
-        space_density=ObsConf['SpaceDensity'],
-        time_density=ObsConf['TimeDensity']
-    )
-
-    ObsType = np.ones(np.shape(ObsLoc)[0]) * ObsConf['Type']
-    TLoc = np.arange(1, ntout + 1)
-
-    YObs, YObsMask = hoperator.model_to_obs(
-        nx=Nx, no=NObs, nt=ntout, nens=1,
-        obsloc=ObsLoc, x=XDA, obstype=ObsType,
-        obsval=np.zeros(NObs), obserr=np.ones(NObs),
-        xloc=ModelConf['XLoc'], tloc=TLoc,
-        gross_check_factor=1.0e9, low_dbz_per_thresh=1.1
-    )
-
-    ObsLoc[:, 1] = (ObsLoc[:, 1] - 1) * ObsConf['Freq']
-    ObsError = np.ones(np.shape(YObs)) * ObsConf['Error']
-    ObsBias = np.ones(np.shape(YObs)) * ObsConf['Bias']
-
-    YObs = hoperator.add_obs_error(
-        no=NObs, nens=1, obs=YObs, obs_error=ObsError,
-        obs_bias=ObsBias, otype=ObsConf['Type']
-    )
-
-    print('Observations took', time.time() - start, 'seconds.')
-    
-    return YObs, ObsLoc, ObsType, ObsError
 
 def save_output(GeneralConf, DAConf, XDA, XSSDA, DFDA, RFDA, SSFDA, CDA, YObs, NObs, ObsLoc, ObsType, ObsError):
     if DAConf['RunSave']:
@@ -134,13 +128,56 @@ def save_output(GeneralConf, DAConf, XDA, XSSDA, DFDA, RFDA, SSFDA, CDA, YObs, N
         print('Saving took', time.time() - start, 'seconds.')
 
 def run_da_process(conf):
-    GeneralConf, DAConf, ModelConf = initialize_da_run(conf)
+    GeneralConf = conf.GeneralConf
+    DAConf = conf.DAConf
+    ModelConf = conf.ModelConf
 
+    #=================================================================
+    #  LOAD OBSERVATIONS AND NATURE RUN CONFIGURATION
+    #=================================================================
+        
+    print('Reading observations from file ',GeneralConf['ObsFile'])
+        
+    InputData=np.load(GeneralConf['ObsFile'],allow_pickle=True)
+        
+    ObsConf=InputData['ObsConf'][()]
+    DAConf['Freq']=ObsConf['Freq']
+    DAConf['TSFreq']=ObsConf['Freq']
+
+    YObs    =  InputData['YObs']         #Obs value
+    ObsLoc  =  InputData['ObsLoc']       #Obs location (space , time)
+    ObsType =  InputData['ObsType']      #Obs type ( x or x^2)
+    ObsError=  InputData['ObsError']     #Obs error 
+
+    ModelConf['dt'] = InputData['ModelConf'][()]['dt']
+        
+    #Store the true state evolution for verfication 
+    XNature = InputData['XNature']   #State variables
+    CNature = InputData['CNature']   #Parameters
+    FNature = InputData['FNature']   #Large scale forcing.
+
+    if DAConf['ExpLength'] == None :
+        DALength = int( max( ObsLoc[:,1] ) / DAConf['Freq'] )
+    else:
+        DALength = DAConf['ExpLength']
+        XNature = XNature[:,:,0:DALength+1]
+        CNature = CNature[:,:,:,0:DALength+1] 
+        FNature = FNature[:,:,0:DALength+1]
+   
     NCoef = ModelConf['NCoef']
     NEns = DAConf['NEns']
     Nx = ModelConf['nx']
     NxSS = ModelConf['nxss']
     
+    XA=np.zeros([Nx,NEns,DALength])                         #Analisis ensemble
+    XF=np.zeros([Nx,NEns,DALength])                         #Forecast ensemble
+    PA=np.zeros([Nx,NEns,NCoef,DALength])                   #Analized parameters
+    PF=np.zeros([Nx,NEns,NCoef,DALength])                   #Forecasted parameters
+    NAssimObs=np.zeros(DALength)
+        
+    F=np.zeros([Nx,NEns,DALength])                          #Total forcing on large scale variables.
+    
+
     XSigma = ModelConf['XSigma'] if ModelConf['EnableSRF'] else 0.0
     XPhi = ModelConf['XPhi'] if ModelConf['EnableSRF'] else 1.0
     CSigma = ModelConf['CSigma'] if ModelConf['EnablePRF'] else np.zeros(NCoef)
@@ -154,14 +191,19 @@ def run_da_process(conf):
     XSS0 = np.zeros((NxSS, NEns))
     C0 = np.zeros((Nx, NEns, NCoef))
     
-    for ie in range(NEns):
-        X0[:, ie] = ModelConf['Coef'][0] / 2 + np.random.normal(size=Nx)
-        for ic in range(NCoef):
-            C0[:, ie, ic] = ModelConf['Coef'][ic] + FSpaceAmplitude[ic] * np.cos(FSpaceFreq[ic] * 2 * np.pi * np.arange(Nx) / Nx)
-    
+    #Generate a random initial conditions and initialize deterministic parameters
+    for ie in range(0,NEns):
+        RandInd1=(np.round(np.random.rand(1)*DALength)).astype(int)
+        RandInd2=(np.round(np.random.rand(1)*DALength)).astype(int)
+        
+        #Replace the random perturbation for a mos inteligent perturbation
+        XA[:,ie,0]=ModelConf['Coef'][0]/2 + np.squeeze( DAConf['InitialXSigma'] * ( XNature[:,0,RandInd1] - XNature[:,0,RandInd2] ) )
+
+        for ic in range(0,NCoef) : 
+            PA[:,ie,ic,0]=ModelConf['Coef'][ic] + DAConf['InitialPSigma'][ic] * np.random.normal( size=1 )
+                    
     XSU, XSSSU, DFSU, RFSU, SSFSU, CRFSU, CSU = run_spin_up(
         ModelConf, DAConf, NEns, NCoef, Nx, NxSS, X0, XSS0, RF0, CRF0, C0, XPhi, XSigma, CPhi, CSigma
     )
     
-    XDA, XSSDA, DFDA, RFDA, SSFDA, CRFDA, CDA = run_da(
-        ModelConf, DAConf, ObsConf, XSU, XSSSU, RFS)
+    XDA, XSSDA, DFDA, RFDA, SSFDA, CRFDA, CDA = run_da(ModelConf, DAConf, ObsConf, XSU, XSSSU, RFS)
