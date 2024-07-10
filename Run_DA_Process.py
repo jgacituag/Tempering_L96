@@ -58,51 +58,147 @@ def inflation( ensemble_post , ensemble_prior , nature , inf_coefs )  :
 
    return ensemble_post
 
-def run_spin_up(ModelConf, DAConf, NEns, NCoef, Nx, NxSS, X0, XSS0, RF0, CRF0, C0, XPhi, XSigma, CPhi, CSigma):
-    print('Doing Spinup')
-    start = time.time()
-    
-    nt = int(DAConf['SPLength'] / ModelConf['dt'])
-    ntout = 2
+def verification_diagnostics(XA,XF,XNature,DALength,SpinUp=200):
+    XASpread = np.std(XA,axis=1)
+    XFSpread = np.std(XF,axis=1)
 
-    spin_up_out = model.tinteg_rk4(
-        nens=1, nt=nt, ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0,
-        phi=XPhi, sigma=XSigma, c0=C0, crf0=CRF0, cphi=CPhi,
-        csigma=CSigma, param=ModelConf['TwoScaleParameters'],
-        nx=Nx, ncoef=NCoef, dt=ModelConf['dt'], dtss=ModelConf['dtss']
-    )
-    
-    [XSU, XSSSU, DFSU, RFSU, SSFSU, CRFSU, CSU] = spin_up_out   
-    print('Spinup took', time.time() - start, 'seconds.')
-    
-    return XSU, XSSSU, DFSU, RFSU, SSFSU, CRFSU, CSU
+    XAMean = np.mean(XA,axis=1)
+    XFMean = np.mean(XF,axis=1)
 
-def run_da(ModelConf, DAConf, ObsConf, XSU, XSSSU, RFSU, CRFSU, NEns, NCoef, Nx, NxSS, XPhi, XSigma, CPhi, CSigma):
+    XASRmse = np.sqrt(np.mean(np.power(XAMean[:, SpinUp:DALength] - XNature[:,0,SpinUp:DALength], 2), axis=1 ) )
+    XFSRmse = np.sqrt(np.mean(np.power(XFMean[:, SpinUp:DALength] - XNature[:,0,SpinUp:DALength], 2), axis=1 ) )
+
+    XATRmse = np.sqrt(np.mean(np.power(XAMean - XNature[:,0,0:DALength], 2), axis = 0))
+    XFTRmse = np.sqrt(np.mean(np.power(XFMean - XNature[:,0,0:DALength], 2), axis = 0))
+
+    XASBias = np.mean(XAMean[:,SpinUp:DALength] - XNature[:,0,SpinUp:DALength], axis=1)
+    XFSBias = np.mean(XFMean[:,SpinUp:DALength] - XNature[:,0,SpinUp:DALength], axis=1)
+
+    XATBias = np.mean(XAMean-XNature[:,0,0:DALength], axis=0)
+    XFTBias = np.mean(XFMean-XNature[:,0,0:DALength], axis=0)
+
+    print(' Analysis RMSE ',np.mean(XASRmse),' Analysis SPREAD ',np.mean(XASpread))
+
+    return XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias
+
+def run_da(ModelConf,DAConf,ObsConf,PF,XF,PA,XA,F,XNature,DALength,ObsLoc,ObsType,ObsError):
     print('Running Data Assimilation')
-    start = time.time()
-    
-    X0 = XSU[:, :, -1]
-    XSS0 = XSSSU[:, :, -1]
-    CRF0 = CRFSU[:, :, -1]
-    RF0 = RFSU[:, :, -1]
+    for it in range(1, DALength):
+        if np.mod(it,100) == 0:
+            print('Data assimilation cycle # ',str(it) )
+        #=================================================================#
+        #                        ENSEMBLE FORECAST                        #
+        #=================================================================#
+        #Run the ensemble forecast
+        #print('Runing the ensemble')
 
-    nt = int(DAConf['Length'] / ModelConf['dt'])
-    ntout = int(nt / ObsConf['Freq']) + 1
+        ntout=int( DAConf['Freq'] / DAConf['TSFreq'] ) + 1  #Output the state every ObsFreq time steps.
+        NT = DAConf['Freq']
+        DT = ModelConf['dt']
+        X0 = XA[:,:,it-1]
+        C0 = PA[:,:,:,it-1]
+        params = ModelConf['TwoScaleParameters']
+        DTSS = ModelConf['dtss']
+        ensout=model.tinteg_rk4(nens=NEns, nt=NT,  ntout=ntout,
+                                x0=X0, xss0=XSS, rf0=RF, phi=XPhi, sigma=XSigma,
+                                c0=C0, crf0=CRF, cphi=CPhi, csigma=CSigma, param=params,
+                                nx=Nx,  nxss=NxSS, ncoef=NCoef, dt=DT, dtss=DTSS)
+        [ XFtmp , XSStmp , DFtmp , RFtmp , SSFtmp , CRFtmp, CFtmp ] = ensout
+        PF[:,:,:,it] = CFtmp[:,:,:,-1]  #Store the parameter at the end of the window
+        XF[:,:,it] = XFtmp[:,:,-1]      #Store the state variables ensemble at the end of the window
+            
+        F[:,:,it] = DFtmp[:,:,-1]+RFtmp[:,:,-1]+SSFtmp[:,:,-1]  #Store the total forcing
+            
+        XSS = XSStmp[:,:,-1]
+        CRF = CRFtmp[:,:,-1]
+        RF = RFtmp[:,:,-1]
+            
+        #=================================================================#
+        #           GET THE OBSERVATIONS WITHIN THE TIME WINDOW           #
+        #=================================================================#
 
-    da_out = model.tinteg_rk4(
-        nens=1, nt=nt, ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0,
-        phi=XPhi, sigma=XSigma, c0=C0, crf0=CRF0, cphi=CPhi,
-        csigma=CSigma, param=ModelConf['TwoScaleParameters'],
-        nx=Nx, ncoef=NCoef, dt=ModelConf['dt'], dtss=ModelConf['dtss']
-    )
+        da_window_start  = (it -1) * DAConf['Freq']
+        da_window_end    = da_window_start + DAConf['Freq']
+        da_analysis_time = da_window_end
 
-    [XDA, XSSDA, DFDA, RFDA, SSFDA, CRFDA, CDA] = da_out
-    print('Data assimilation took', time.time() - start, 'seconds.')
+        #Screen the observations and get only the onew within the da window
+        window_mask=np.logical_and( ObsLoc[:,1] > da_window_start , ObsLoc[:,1] <= da_window_end )
 
-    return XDA, XSSDA, DFDA, RFDA, SSFDA, CRFDA, CDA
+        ObsLocW=ObsLoc[window_mask,:]                                     #Observation location within the DA window.
+        ObsTypeW=ObsType[window_mask]                                     #Observation type within the DA window
+        YObsW=YObs[window_mask]                                           #Observations within the DA window
+        NObsW=YObsW.size                                                  #Number of observations within the DA window
+        ObsErrorW=ObsError[window_mask]                                   #Observation error within the DA window  
+
+        #=================================================================#
+        #                       HYBRID-TEMPERED DA                        #
+        #=================================================================#
+
+        stateens = np.copy(XF[:,:,it])
+
+        #=================================================================#
+        #                      OBSERVATION OPERATOR                       #
+        #=================================================================#      
+        #Apply h operator and transform from model space to observation space.
+        #This opearation is performed only at the end of the window.
+
+        if NObsW > 0:
+            XLOC=ModelConf['XLoc']
+            TLoc= da_window_end #We are assuming that all observations are valid at the end of the assimilaation window.
+            [YF, YFqc] = hoperator.model_to_obs(nx = Nx, no = NObsW, nt = 1, nens = NEns,
+                            obsloc = ObsLocW, x = stateens, obstype=ObsTypeW, obserr=ObsErrorW, obsval=YObsW,
+                            xloc = XLOC, tloc = TLoc, gross_check_factor = DAConf['GrossCheckFactor'],
+                            low_dbz_per_thresh = DAConf['LowDbzPerThresh'])
+            YFmask = np.ones( YFqc.shape ).astype(bool)
+            YFmask[YFqc != 1] = False
+
+            ObsLocW = ObsLocW[YFmask, :]
+            ObsTypeW = ObsTypeW[YFmask]
+            YObsW = YObsW[YFmask, :]
+            NObsW = YObsW.size
+            ObsErrorW = ObsErrorW[YFmask, :]
+            YF = YF[YFmask, :]
+   
+            #=================================================================
+            #  LETKF STEP  : 
+            #=================================================================
+
+            stateens = das.da_letkf(nx = Nx ,nt = 1 , no = NObsW, nens = NEns, xloc = XLOC,
+                                    tloc = da_window_end, nvar = 1, xfens = stateens,
+                                    obs = YObsW ,obsloc = ObsLocW, ofens = YF,
+                                    rdiag = ObsErrorW , loc_scale = DAConf['LocScalesLETKF'], inf_coefs= DAConf['InfCoefs'],
+                                    update_smooth_coef = 0.0 , temp_factor = np.ones(Nx) )[:,:,0,0]
+   
+            XA[:,:,it] = np.copy(stateens)
+            PA[:,:,:,it]=PA[:,:,:,0]
+
+    verout = verification_diagnostics(XA,XF,XNature,DALength)
+    XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias = verout
+    return XA, PA, F, XF, XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias, ModelConf, DAConf, GeneralConf
 
 
-def save_output(GeneralConf, DAConf, XDA, XSSDA, DFDA, RFDA, SSFDA, CDA, YObs, NObs, ObsLoc, ObsType, ObsError):
+def save_output(XA, PA, F, XF, XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias, ModelConf, DAConf, GeneralConf):
+    filename= GeneralConf['DataPath'] + '/' + GeneralConf['OutFile'] 
+    print('Saving the output to ' + filename  )
+
+    if not os.path.exists( GeneralConf['DataPath'] + '/' )  :
+      os.makedirs(  GeneralConf['DataPath'] + '/'  )
+
+    #Save Nature run output
+    np.savez(filename,
+             XA = XA, PA = PA, F = F, XF = XF, 
+             XAMean = XAMean, XFMean = XFMean,
+             XASpread = XASpread, XFSpread = XFSpread,
+             XASRmse = XASRmse, XFSRmse = XFSRmse,
+             XATRmse = XATRmse, XFTRmse = XFTRmse ,
+             XASBias = XASBias, XFSBias = XFSBias,
+             XATBias = XATBias, XFTBias = XFTBias,
+             ModelConf = ModelConf   , DAConf = DAConf, GeneralConf = GeneralConf )
+
+
+
+
+
     if DAConf['RunSave']:
         FDA = DFDA + RFDA + SSFDA
         
