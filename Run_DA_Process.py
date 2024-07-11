@@ -3,15 +3,14 @@
 import sys
 import os
 import time
-import numpy as np
 import logging
-from scipy import stats
+import numpy as np
 import experiment_config as expconf
 sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/model/")
 sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/data_assimilation/")
-from model  import lorenzn          as model          #Import the model (fortran routines)
-from obsope import common_obs       as hoperator      #Import the observation operator (fortran routines)
-from da     import common_da_tools  as das            #Import the data assimilation routines (fortran routines)
+from model import lorenzn as model          #Import the model (fortran routines)
+from obsope import common_obs as hoperator  #Import the observation operator (fortran routines)
+from da import common_da_tools as das       #Import the data assimilation routines (fortran routines)
 
 
 def inflation( ensemble_post , ensemble_prior , nature , inf_coefs )  :

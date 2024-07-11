@@ -14,10 +14,10 @@ GeneralConf['ExpPath'] = f"{GeneralConf['GeneralPath']}/{GeneralConf['ExpName']}
 #GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/storage/Tempering_L96/Fortran_routines'               # path to the compiled fortran routines
 GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/storage/DABA/Lorenz_96/'
 GeneralConf['DataPath'] = f"{GeneralConf['ExpPath']}/DATA"
-GeneralConf['NewExperiment'] = True
-GeneralConf['RunNature'] = True
-GeneralConf['RunDA'] = True
-GeneralConf['RunPlots'] = False
+GeneralConf['NewExperiment'] = False
+GeneralConf['RunNature'] = False
+GeneralConf['RunDA'] = False
+GeneralConf['RunPlots'] = True
 
 #=============================================================================#
 #                                MODEL SECTION                                #
@@ -66,6 +66,10 @@ NatureConf['RunPlot']=True                          #Plot nature run
 NatureConf['SPLength']=40                           #Spin up length in model time units (1 model time unit app. equivalent to 5 day time in the atmosphere)
 NatureConf['Length']=1000                           #Nature run length in model time units (1 model time unit app. equivalent to 5 day time in the atmosphere)
 
+#Nature plots if NatureConf['RunPlot']=True
+NatureConf['NPlot']=500
+NatureConf['RunPlotNatureHoperator']=True           #Plot the nature run and the observation operator
+
 #=============================================================================#
 #                            OBSERVATIONS SECTION                             #
 #=============================================================================#
@@ -109,4 +113,3 @@ DAConf['UpdateSmoothCoef']=0.0                       #Data assimilation update s
 DAConf['InitialPSigma']=np.array([0,0,0])            #Initial ensemble spread for the parameters. (0 means no parameter estimation)
 DAConf['GrossCheckFactor'] = 20.0                    #Gross check error threshold (observations associated with innovations greather than GrossCheckFactor * R**0.5 will be rejected).
 DAConf['LowDbzPerThresh']  = 1.01                    #If the percentaje of ensemble members with reflectivity values == to the lower limit, then the observation is not assimilated [reflectivity obs only]
-
