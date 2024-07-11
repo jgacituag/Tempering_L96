@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import numpy as np
+import logging
 from scipy import stats
 import experiment_config as expconf
 sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/model/")
@@ -81,10 +82,80 @@ def verification_diagnostics(XA,XF,XNature,DALength,SpinUp=200):
 
     return XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias
 
-def run_da(ModelConf,DAConf,ObsConf,PF,XF,PA,XA,F,XNature,DALength,ObsLoc,ObsType,ObsError):
-    print('Running Data Assimilation')
+def run_da(GeneralConf,ModelConf,DAConf,ObsConf):
+
+    #=================================================================
+    #  LOAD OBSERVATIONS AND NATURE RUN CONFIGURATION
+    #=================================================================
+    ObsFile = ObsConf['obsfile']
+    logging.info(f"Reading observations from file {ObsFile}")
+        
+    InputData=np.load(ObsFile,allow_pickle=True)
+        
+    DAConf['Freq']=ObsConf['Freq']
+    DAConf['TSFreq']=ObsConf['Freq']
+
+    YObs = InputData['YObs']          #Obs value
+    ObsLoc = InputData['ObsLoc']      #Obs location (space , time)
+    ObsType = InputData['ObsType']    #Obs type ( x or x^2)
+    ObsError = InputData['ObsError']  #Obs error 
+
+    ModelConf['dt'] = InputData['ModelConf'][()]['dt']
+        
+    #Store the true state evolution for verfication
+    XNature = InputData['XNature']    #State variables
+    CNature = InputData['CNature']    #Parameters
+    FNature = InputData['FNature']    #Large scale forcing.
+
+    if DAConf['ExpLength'] == None :
+        DALength = int( max( ObsLoc[:,1] ) / DAConf['Freq'] )
+    else:
+        DALength = DAConf['ExpLength']
+        XNature = XNature[:,:,0:DALength+1]
+        CNature = CNature[:,:,:,0:DALength+1] 
+        FNature = FNature[:,:,0:DALength+1]
+   
+    NCoef = ModelConf['NCoef']
+    NEns = DAConf['NEns']
+    Nx = ModelConf['nx']
+    NxSS = ModelConf['nxss']
+    
+    XA=np.zeros([Nx,NEns,DALength])                         #Analisis ensemble
+    XF=np.zeros([Nx,NEns,DALength])                         #Forecast ensemble
+    PA=np.zeros([Nx,NEns,NCoef,DALength])                   #Analized parameters
+    PF=np.zeros([Nx,NEns,NCoef,DALength])                   #Forecasted parameters
+    F=np.zeros([Nx,NEns,DALength])                          #Total forcing on large scale variables.
+
+    XSigma = ModelConf['XSigma'] if ModelConf['EnableSRF'] else 0.0
+    XPhi = ModelConf['XPhi'] if ModelConf['EnableSRF'] else 1.0
+    CSigma = ModelConf['CSigma'] if ModelConf['EnablePRF'] else np.zeros(NCoef)
+    CPhi = ModelConf['CPhi'] if ModelConf['EnablePRF'] else 1.0
+    FSpaceAmplitude = ModelConf['FSpaceAmplitude'] if ModelConf['FSpaceDependent'] else np.zeros(NCoef)
+    FSpaceFreq = ModelConf['FSpaceFreq']
+    
+    CRF = np.zeros([NEns, NCoef])
+    RF = np.zeros([Nx, NEns])
+    XSS = np.zeros((NxSS, NEns))
+    SFF=np.zeros((Nx,NEns))
+    C0 = np.zeros((Nx, NEns, NCoef))
+    
+    #Generate a random initial conditions and initialize deterministic parameters
+    for ie in range(0,NEns):
+        RandInd1=(np.round(np.random.rand(1)*DALength)).astype(int)
+        RandInd2=(np.round(np.random.rand(1)*DALength)).astype(int)
+        
+        #Replace the random perturbation for a mos inteligent perturbation
+        XA[:,ie,0]=ModelConf['Coef'][0]/2 + np.squeeze( DAConf['InitialXSigma'] * ( XNature[:,0,RandInd1] - XNature[:,0,RandInd2] ) )
+
+        for ic in range(0,NCoef) : 
+            PA[:,ie,ic,0]=ModelConf['Coef'][ic] + DAConf['InitialPSigma'][ic] * np.random.normal( size=1 )
+                    
+
+
+    logging.info(f'Running Data Assimilation')
     for it in range(1, DALength):
         if np.mod(it,100) == 0:
+            logging.info(f'Data assimilation cycle # {it}')
             print('Data assimilation cycle # ',str(it) )
         #=================================================================#
         #                        ENSEMBLE FORECAST                        #
@@ -174,15 +245,15 @@ def run_da(ModelConf,DAConf,ObsConf,PF,XF,PA,XA,F,XNature,DALength,ObsLoc,ObsTyp
 
     verout = verification_diagnostics(XA,XF,XNature,DALength)
     XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias = verout
-    return XA, PA, F, XF, XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias, ModelConf, DAConf, GeneralConf
+    return XA, PA, F, XF, XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias
 
 
-def save_output(XA, PA, F, XF, XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias, ModelConf, DAConf, GeneralConf):
-    filename= GeneralConf['DataPath'] + '/' + GeneralConf['OutFile'] 
-    print('Saving the output to ' + filename  )
-
-    if not os.path.exists( GeneralConf['DataPath'] + '/' )  :
-      os.makedirs(  GeneralConf['DataPath'] + '/'  )
+def save_output(DAout, ModelConf, DAConf, ObsConf,GeneralConf):
+    XA, PA, F, XF, XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSRmse, XATRmse, XFTRmse, XASBias, XFSBias, XATBias, XFTBias = DAout
+    filename = os.path.join(GeneralConf['DataPath'], DAConf['DAFileName'])
+    logging.info(f'Saving the output to {filename}')
+    start = time.time()
+    os.makedirs(GeneralConf['DataPath'], exist_ok=True)
 
     #Save Nature run output
     np.savez(filename,
@@ -193,113 +264,16 @@ def save_output(XA, PA, F, XF, XAMean, XFMean, XASpread, XFSpread, XASRmse, XFSR
              XATRmse = XATRmse, XFTRmse = XFTRmse ,
              XASBias = XASBias, XFSBias = XFSBias,
              XATBias = XATBias, XFTBias = XFTBias,
-             ModelConf = ModelConf   , DAConf = DAConf, GeneralConf = GeneralConf )
-
-
-
-
-
-    if DAConf['RunSave']:
-        FDA = DFDA + RFDA + SSFDA
-        
-        filename = os.path.join(GeneralConf['DataPath'], GeneralConf['DAFileName'])
-        print('Saving the output to ' + filename)
-        start = time.time()
-
-        os.makedirs(GeneralConf['DataPath'], exist_ok=True)
-
-        np.savez(
-            filename, XDA=XDA, FDA=FDA, CDA=CDA,
-            YObs=YObs, NObs=NObs, ObsLoc=ObsLoc, ObsType=ObsType,
-            ObsError=ObsError, ModelConf=ModelConf, DAConf=DAConf,
-            GeneralConf=GeneralConf, XSSDA=XSSDA
-        )
-
-        fileout = os.path.join(GeneralConf['DataPath'], 'XDA.csv')
-        np.savetxt(fileout, np.transpose(np.squeeze(XDA)), fmt="%6.2f", delimiter=",")
-
-        fileout = os.path.join(GeneralConf['DataPath'], 'XSSDA.csv')
-        np.savetxt(fileout, np.transpose(np.squeeze(XSSDA)), fmt="%6.2f", delimiter=",")
-        
-        print('Saving took', time.time() - start, 'seconds.')
+             ModelConf = ModelConf   , DAConf = DAConf, GeneralConf = GeneralConf, ObsConf = ObsConf)
+    logging.info(f'Saving took {time.time() - start} seconds.')
 
 def run_da_process(conf):
     GeneralConf = conf.GeneralConf
     DAConf = conf.DAConf
     ModelConf = conf.ModelConf
+    ObsConf = conf.ObsConf
 
-    #=================================================================
-    #  LOAD OBSERVATIONS AND NATURE RUN CONFIGURATION
-    #=================================================================
-        
-    print('Reading observations from file ',GeneralConf['ObsFile'])
-        
-    InputData=np.load(GeneralConf['ObsFile'],allow_pickle=True)
-        
-    ObsConf=InputData['ObsConf'][()]
-    DAConf['Freq']=ObsConf['Freq']
-    DAConf['TSFreq']=ObsConf['Freq']
+    DAout = run_da(GeneralConf, ModelConf, DAConf, ObsConf)
 
-    YObs    =  InputData['YObs']         #Obs value
-    ObsLoc  =  InputData['ObsLoc']       #Obs location (space , time)
-    ObsType =  InputData['ObsType']      #Obs type ( x or x^2)
-    ObsError=  InputData['ObsError']     #Obs error 
-
-    ModelConf['dt'] = InputData['ModelConf'][()]['dt']
-        
-    #Store the true state evolution for verfication 
-    XNature = InputData['XNature']   #State variables
-    CNature = InputData['CNature']   #Parameters
-    FNature = InputData['FNature']   #Large scale forcing.
-
-    if DAConf['ExpLength'] == None :
-        DALength = int( max( ObsLoc[:,1] ) / DAConf['Freq'] )
-    else:
-        DALength = DAConf['ExpLength']
-        XNature = XNature[:,:,0:DALength+1]
-        CNature = CNature[:,:,:,0:DALength+1] 
-        FNature = FNature[:,:,0:DALength+1]
-   
-    NCoef = ModelConf['NCoef']
-    NEns = DAConf['NEns']
-    Nx = ModelConf['nx']
-    NxSS = ModelConf['nxss']
-    
-    XA=np.zeros([Nx,NEns,DALength])                         #Analisis ensemble
-    XF=np.zeros([Nx,NEns,DALength])                         #Forecast ensemble
-    PA=np.zeros([Nx,NEns,NCoef,DALength])                   #Analized parameters
-    PF=np.zeros([Nx,NEns,NCoef,DALength])                   #Forecasted parameters
-    NAssimObs=np.zeros(DALength)
-        
-    F=np.zeros([Nx,NEns,DALength])                          #Total forcing on large scale variables.
-    
-
-    XSigma = ModelConf['XSigma'] if ModelConf['EnableSRF'] else 0.0
-    XPhi = ModelConf['XPhi'] if ModelConf['EnableSRF'] else 1.0
-    CSigma = ModelConf['CSigma'] if ModelConf['EnablePRF'] else np.zeros(NCoef)
-    CPhi = ModelConf['CPhi'] if ModelConf['EnablePRF'] else 1.0
-    FSpaceAmplitude = ModelConf['FSpaceAmplitude'] if ModelConf['FSpaceDependent'] else np.zeros(NCoef)
-    FSpaceFreq = ModelConf['FSpaceFreq']
-    
-    CRF0 = np.zeros([NEns, NCoef])
-    RF0 = np.zeros([Nx, NEns])
-    X0 = np.zeros((Nx, NEns))
-    XSS0 = np.zeros((NxSS, NEns))
-    C0 = np.zeros((Nx, NEns, NCoef))
-    
-    #Generate a random initial conditions and initialize deterministic parameters
-    for ie in range(0,NEns):
-        RandInd1=(np.round(np.random.rand(1)*DALength)).astype(int)
-        RandInd2=(np.round(np.random.rand(1)*DALength)).astype(int)
-        
-        #Replace the random perturbation for a mos inteligent perturbation
-        XA[:,ie,0]=ModelConf['Coef'][0]/2 + np.squeeze( DAConf['InitialXSigma'] * ( XNature[:,0,RandInd1] - XNature[:,0,RandInd2] ) )
-
-        for ic in range(0,NCoef) : 
-            PA[:,ie,ic,0]=ModelConf['Coef'][ic] + DAConf['InitialPSigma'][ic] * np.random.normal( size=1 )
-                    
-    XSU, XSSSU, DFSU, RFSU, SSFSU, CRFSU, CSU = run_spin_up(
-        ModelConf, DAConf, NEns, NCoef, Nx, NxSS, X0, XSS0, RF0, CRF0, C0, XPhi, XSigma, CPhi, CSigma
-    )
-    
-    XDA, XSSDA, DFDA, RFDA, SSFDA, CRFDA, CDA = run_da(ModelConf, DAConf, ObsConf, XSU, XSSSU, RFS)
+    if DAConf['RunSave']:
+        save_output(DAout, ModelConf, DAConf, ObsConf,GeneralConf)

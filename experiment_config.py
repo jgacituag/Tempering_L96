@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import numpy as np
+import os
 
 #=============================================================================#
 #                            GENERAL CONFIGURATION                            #
@@ -12,7 +13,7 @@ GeneralConf['GeneralPath'] = '/media/jgacitua/storage/Tempering_L96'
 GeneralConf['ExpPath'] = f"{GeneralConf['GeneralPath']}/{GeneralConf['ExpName']}"            # path to the experiment
 #GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/storage/Tempering_L96/Fortran_routines'               # path to the compiled fortran routines
 GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/storage/DABA/Lorenz_96/'
-GeneralConf['DataPath'] = f"{GeneralConf['ExpPath']}/DATA" 
+GeneralConf['DataPath'] = f"{GeneralConf['ExpPath']}/DATA"
 GeneralConf['NewExperiment'] = True
 GeneralConf['RunNature'] = True
 GeneralConf['RunDA'] = True
@@ -25,7 +26,6 @@ GeneralConf['RunPlots'] = False
 ModelConf=dict()
 
 #General model section
-
 ModelConf['nx'] = 40                                    #Number of large-scale state variables
 ModelConf['dt'] = 0.0125                                #Time step for large-scale variables (do not change)
 #Forcing section
@@ -46,7 +46,6 @@ ModelConf['CPhi'  ]=1.0                                 #Parameter random walk p
 ModelConf['EnableSRF']=False                            #Activate State random forcing.
 ModelConf['XSigma']=0.0                                 #Amplitude of the random walk
 ModelConf['XPhi'  ]=1.0                                 #Time autocorrelation parameter
-
 ModelConf['XLoc'  ]=np.arange(1,ModelConf['nx']+1)      #Location of model grid points (1-nx)
 
 #Two scale model parameters
@@ -60,12 +59,10 @@ ModelConf['dtss']= ModelConf['dt'] / 5                  #Time step increment for
 #=============================================================================#
 
 NatureConf= dict()
-NatureConf['NatureFileName']='Nature' + GeneralConf['ExpName'] + '.npz'
-NatureConf['NEns']=1                               # Number of ensemble mebers for the nature run. (usually 1)
-
+NatureConf['NatureFileName']='Nature_' + GeneralConf['ExpName'] + '.npz'
+NatureConf['NEns']=1                                #Number of ensemble members for the nature run. (usually 1)
 NatureConf['RunSave']=True                          #Save nature run
 NatureConf['RunPlot']=True                          #Plot nature run
-
 NatureConf['SPLength']=40                           #Spin up length in model time units (1 model time unit app. equivalent to 5 day time in the atmosphere)
 NatureConf['Length']=1000                           #Nature run length in model time units (1 model time unit app. equivalent to 5 day time in the atmosphere)
 
@@ -76,16 +73,40 @@ NatureConf['Length']=1000                           #Nature run length in model 
 ObsConf= dict()
 
 ObsConf['Freq']=4                                   #Observation frequency in number of time steps (will also control nature run output frequency)
-
+ObsConf['obsfile'] = os.path.join(GeneralConf['DataPath'], NatureConf['NatureFileName'])
 #Observation location
 ObsConf['NetworkType']='regular'                    #Observation network type: REGULAR, RANDOM, FROMFILE
-
 ObsConf['SpaceDensity']=1                           #Observation density in space. Usually from [0-1] but can be greather than 1.
-ObsConf['TimeDensity']=1                            #Observation density in time.  Usually from [0-1] but can be greather than 1. 
-                                                    #Do not use ObsTimeDensity to change observation frequency for REGULAR obs, use
-                                                    #ObsFreq instead.
+ObsConf['TimeDensity']=1                            #Observation density in time.  Usually from [0-1] but can be greather than 1.
+                                                    #Do not use ObsTimeDensity to change observation frequency for REGULAR obs, use ObsFreq instead.
 #Set the diagonal of R
 ObsConf['Error']=1.0                                #Constant observation error.
 ObsConf['Bias']=0.0                                 #Constant Systematic observation error.
 ObsConf['Type']=1                                   #Observation type (1 observ x, 2 observe x**2)
+
+#=================================================================
+#  DATA ASSIMILATION SECTION :
+#=================================================================
+
+DAConf=dict()
+DAConf['RunSave']=True                               #Save DA run
+DAConf['RunPlot']=True                               #Plot DA run
+DAConf['DAFileName']='DA_' + GeneralConf['ExpName'] + '.npz'
+DAConf['ExpLength'] = 1000                           #None use the full nature run experiment. Else use this length.
+DAConf['NEns'] = 30                                  #Number of ensemble members
+DAConf['Twin'] = True                                #When True, model configuration will be replaced by the model configuration in the nature run.
+DAConf['Freq'] = 4                                   #Assimilation frequency (in number of time steps)
+DAConf['TSFreq'] = 4                                 #Intra window ensemble output frequency (for 4D Data assimilation)
+DAConf['InfCoefs']=np.array([1.04,0.0,0.0,0.0,0.0])  #Mult inf, RTPS, RTPP, EPES, Additive inflation
+DAConf['LocScalesLETKF']=np.array([4.0,-1.0])        #Localization scale is space and time (negative means no localization)
+DAConf['LocScalesLETPF']=np.array([3.0,-1.0])        #Localization scale is space and time (negative means no localization)
+
+#Initial state ensemble.
+DAConf['InitialXSigma']=0.5                          #Initial ensemble spread for state variables.
+DAConf['UpdateSmoothCoef']=0.0                       #Data assimilation update smooth (for parameter estimation only)
+
+#Parameter estimation/perturbation 
+DAConf['InitialPSigma']=np.array([0,0,0])            #Initial ensemble spread for the parameters. (0 means no parameter estimation)
+DAConf['GrossCheckFactor'] = 20.0                    #Gross check error threshold (observations associated with innovations greather than GrossCheckFactor * R**0.5 will be rejected).
+DAConf['LowDbzPerThresh']  = 1.01                    #If the percentaje of ensemble members with reflectivity values == to the lower limit, then the observation is not assimilated [reflectivity obs only]
 
