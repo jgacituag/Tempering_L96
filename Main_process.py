@@ -33,34 +33,35 @@ def main():
 def handle_multiple_configurations():
     '''
     For Multiple configurations create subdirectories 
-    where to run a experiment with a single configuration 
+    where to run an experiment with a single configuration 
     '''
     combinations = generate_combinations(expconf)
     save_configurations(combinations, expconf.GeneralConf['ExpPath'])
     for combo in combinations:
-        exp_path = os.path.join(expconf.GeneralConf['ExpPath'], combo['name'])
-        create_and_change_directory(exp_path)
-        run_single_experiment(combo)
+        run_single_experiment(expconf, combo)
 
 def handle_single_configuration():
     '''
-    General funtion to run a experiment with a single configuration 
+    General function to run an experiment with a single configuration 
     '''
     run_single_experiment(expconf)
 
-def run_single_experiment(exp_config):
+def run_single_experiment(config, combo=None):
     '''
-    General funtion to run a experiment with a single configuration 
+    General function to run an experiment with a single configuration 
     '''
-    if exp_config.GeneralConf['RunNature']:
+    if combo:
+        for key, value in combo.items():
+            if '_' in key:
+                section, var = key.split('_')
+                getattr(config, section)[var] = value
 
-        run_nature_process(exp_config)
-    if exp_config.GeneralConf['RunDA']:
-
-        run_da_process(exp_config)
-    if exp_config.GeneralConf['RunPlots']:
-
-        run_plot_process(exp_config)
+    if config.GeneralConf['RunNature']:
+        run_nature_process(config)
+    if config.GeneralConf['RunDA']:
+        run_da_process(config)
+    if config.GeneralConf['RunPlots']:
+        run_plot_process(config)
 
 if __name__ == "__main__":
     main()

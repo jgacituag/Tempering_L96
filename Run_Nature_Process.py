@@ -19,7 +19,7 @@ def run_spin_up(ModelConf, NatureConf, NEns, NCoef, Nx, NxSS, X0, XSS0, RF0, CRF
     nt = int(NatureConf['SPLength'] / ModelConf['dt'])
     ntout = 2
 
-    spin_up_out = model.tinteg_rk4(nens=1, nt=nt, ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0,
+    spin_up_out = model.tinteg_rk4(nens=NEns, nt=nt, ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0,
                                    phi=XPhi, sigma=XSigma, c0=C0, crf0=CRF0, cphi=CPhi,
                                    csigma=CSigma, param=ModelConf['TwoScaleParameters'],
                                    nx=Nx, ncoef=NCoef, dt=ModelConf['dt'], dtss=ModelConf['dtss'])
@@ -42,7 +42,7 @@ def run_nature(ModelConf, NatureConf, ObsConf, XSU, XSSSU, RFSU, CRFSU, C0, NEns
     ntout = int(nt / ObsConf['Freq']) + 1
 
     nature_out = model.tinteg_rk4(
-        nens=1, nt=nt, ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0,
+        nens=NEns, nt=nt, ntout=ntout, x0=X0, xss0=XSS0, rf0=RF0,
         phi=XPhi, sigma=XSigma, c0=C0, crf0=CRF0, cphi=CPhi,
         csigma=CSigma, param=ModelConf['TwoScaleParameters'],
         nx=Nx, ncoef=NCoef, dt=ModelConf['dt'], dtss=ModelConf['dtss']
@@ -53,7 +53,7 @@ def run_nature(ModelConf, NatureConf, ObsConf, XSU, XSSSU, RFSU, CRFSU, C0, NEns
 
     return XNature, XSSNature, DFNature, RFNature, SSFNature, CRFNature, CNature, ntout
 
-def generate_observations(ModelConf, ObsConf, XNature, Nx, ntout):
+def generate_observations(ModelConf, ObsConf, XNature, Nx, ntout,NEns):
     logging.info('Generating Observations')
     start = time.time()
 
@@ -68,7 +68,7 @@ def generate_observations(ModelConf, ObsConf, XNature, Nx, ntout):
     ObsType = np.ones(np.shape(ObsLoc)[0]) * ObsConf['Type']
     TLoc = np.arange(1, ntout + 1)
 
-    YObs, YObsMask = hoperator.model_to_obs(nx=Nx, no=NObs, nt=ntout, nens=1,
+    YObs, YObsMask = hoperator.model_to_obs(nx=Nx, no=NObs, nt=ntout, nens=NEns,
                                             obsloc=ObsLoc, x=XNature, obstype=ObsType,
                                             obsval=np.zeros(NObs), obserr=np.ones(NObs),
                                             xloc=ModelConf['XLoc'], tloc=TLoc,
@@ -78,7 +78,7 @@ def generate_observations(ModelConf, ObsConf, XNature, Nx, ntout):
     ObsError = np.ones(np.shape(YObs)) * ObsConf['Error']
     ObsBias = np.ones(np.shape(YObs)) * ObsConf['Bias']
 
-    YObs = hoperator.add_obs_error(no=NObs, nens=1, obs=YObs, obs_error=ObsError,
+    YObs = hoperator.add_obs_error(no=NObs, nens=NEns, obs=YObs, obs_error=ObsError,
                                    obs_bias=ObsBias, otype=ObsConf['Type'])
 
     logging.info(f'Observations took {time.time() - start} seconds.')
@@ -141,7 +141,7 @@ def run_nature_process(conf):
     
     XSU, XSSSU, DFSU, RFSU, SSFSU, CRFSU, CSU = run_spin_up(ModelConf, NatureConf, NEns, NCoef, Nx, NxSS, X0, XSS0, RF0, CRF0, C0, XPhi, XSigma, CPhi, CSigma)
     XNature, XSSNature, DFNature, RFNature, SSFNature, CRFNature, CNature, ntout = run_nature(ModelConf, NatureConf, ObsConf, XSU, XSSSU, RFSU, CRFSU, C0, NEns, NCoef, Nx, NxSS, XPhi, XSigma, CPhi, CSigma)
-    YObs, NObs, ObsLoc, ObsType, ObsError = generate_observations(ModelConf, ObsConf, XNature, Nx, ntout)
+    YObs, NObs, ObsLoc, ObsType, ObsError = generate_observations(ModelConf, ObsConf, XNature, Nx, ntout, NEns)
     
     save_output(GeneralConf, NatureConf, ModelConf, ObsConf, 
                 XNature, XSSNature, DFNature, RFNature, SSFNature, 

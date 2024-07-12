@@ -1,7 +1,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-
+import imageio
+import time
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -28,7 +29,6 @@ def plot_nature_and_hoperator(NatureDataPath,NPlot):
     xobs = np.reshape(ObsLoc[:,0], [tmpntimes, tmpnobs]).transpose()
     tobs = np.reshape(ObsLoc[:,1], [tmpntimes, tmpnobs]).transpose()
 
-
     fig , axs = plt.subplots( 1 , 2 , figsize=(12,5),sharey=True)
 
     clevs1 = np.arange(-16, 16.1, 0.5)
@@ -50,20 +50,22 @@ def plot_nature_and_hoperator(NatureDataPath,NPlot):
     plt.show(block=False)
     plt.close()
 
-def plot_nature_and_obs(XNature, YObs, ObsLoc, Nx, GeneralConf, ObsConf, ModelConf,NPlot):
+def plot_nature_and_obs(NatureDataPath,ModelConf,GeneralConf,ObsConf,NPlot):
    
     if not isinstance(NPlot, int):
         NPlot = 1000   #Plot the last NPlot times.
 
+
+    Data = np.load(NatureDataPath,allow_pickle=True)
+    #ObsConf = Data['ObsConf']
+    XNature = Data['XNature']
+    YObs = Data['YObs']
+    ObsLoc = Data['ObsLoc']
+    Nx = ModelConf['nx']
+    FigPath = GeneralConf['FiguresPath']
+    os.makedirs(FigPath, exist_ok=True)
     print('Ploting the output')
     start = time.time()
-    FigPath=GeneralConf['FigPath']
-    ExpName=GeneralConf['ExpName']
-
-
-    if not os.path.exists( FigPath + '/' + ExpName )  :
-        os.makedirs(  FigPath + '/' + ExpName )
-
 
     #Plot the observations
     tmpnobs = int(np.arange(1, Nx+1, int(1/ObsConf['SpaceDensity']) ).size )
@@ -80,7 +82,7 @@ def plot_nature_and_obs(XNature, YObs, ObsLoc, Nx, GeneralConf, ObsConf, ModelCo
     plt.ylabel('Grid points')
     plt.title('X True')
     plt.colorbar()
-    plt.savefig( FigPath + '/' + ExpName + '/Nature_run_X.png', facecolor='w', format='png' )
+    plt.savefig( FigPath +'/Nature_run_X.png', facecolor='w', format='png' )
     plt.show(block=False)
     #plt.close()
 
@@ -91,7 +93,7 @@ def plot_nature_and_obs(XNature, YObs, ObsLoc, Nx, GeneralConf, ObsConf, ModelCo
     plt.xlabel('Time')
     plt.ylabel('Observation location')
     plt.title('Observations')
-    plt.savefig( FigPath + '/' + ExpName + '/Nature_run_Y.png', facecolor='w', format='png' )
+    plt.savefig( FigPath + '/Nature_run_Y.png', facecolor='w', format='png' )
     plt.show(block=False)
     #plt.close()
 
@@ -102,7 +104,7 @@ def plot_nature_and_obs(XNature, YObs, ObsLoc, Nx, GeneralConf, ObsConf, ModelCo
     plt.xlabel('Time')
     plt.ylabel('X at 1st grid point')
     plt.title('Nature and Observations')
-    plt.savefig( FigPath + '/' + ExpName + '/Nature_and_Obs_Time_Serie.png', facecolor='w', format='png' )
+    plt.savefig( FigPath + '/Nature_and_Obs_Time_Serie.png', facecolor='w', format='png' )
     plt.show(block=False)
     #plt.close()
 
@@ -112,7 +114,7 @@ def plot_nature_and_obs(XNature, YObs, ObsLoc, Nx, GeneralConf, ObsConf, ModelCo
     plt.xlabel('Location')
     plt.ylabel('X at last time')
     plt.title('Nature and Observations')
-    plt.savefig( FigPath + '/' + ExpName + '/Nature_and_Obs_At_Last_Time.png', facecolor='w', format='png' )
+    plt.savefig( FigPath + '/Nature_and_Obs_At_Last_Time.png', facecolor='w', format='png' )
     plt.show(block=False)
     #plt.close()
 
@@ -149,9 +151,7 @@ def plot_nature_and_obs(XNature, YObs, ObsLoc, Nx, GeneralConf, ObsConf, ModelCo
             return image
 
 
-    imageio.mimsave(FigPath + '/' + ExpName + '/Nature_run_X.gif', [plot_for_image(XNature[:,0,i], tmpobs[:,i],xobs[:,i],ModelConf['dt']*np.unique(tobs)[i]) for i in range(NPlot)], fps=10)
-
-
+    imageio.mimsave(FigPath + '/Nature_run_X.gif', [plot_for_image(XNature[:,0,i], tmpobs[:,i],xobs[:,i],ModelConf['dt']*np.unique(tobs)[i]) for i in range(NPlot)], fps=10)
 
 
     print('Ploting took ', time.time()-start, 'seconds.')
@@ -230,8 +230,9 @@ def run_plot_process(conf):
         naturefile=os.path.join(GeneralConf['DataPath'], NatureConf['NatureFileName'])
         NPlot = NatureConf['NPlot']
         if NatureConf['RunPlotNatureHoperator']:
-            
             plot_nature_and_hoperator(naturefile, NPlot)
+        if NatureConf['RunPlotNatureObsGIF']:
+            plot_nature_and_obs(naturefile,ModelConf,GeneralConf,ObsConf,NPlot)
     #if config['RunPlotState']:
     #    plot_state_estimation(config)
     #if config['RunPlotForcing']:
