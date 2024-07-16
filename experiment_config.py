@@ -71,8 +71,8 @@ NatureConf['SPLength']=40                              # Spin up length in model
 NatureConf['Length']=1000                              # Nature run length in model time units (1 model time unit app. equivalent to 5 day time in the atmosphere)
 
 #Nature plots if NatureConf['RunPlot']=True
-NatureConf['NPlot']=500
-NatureConf['RunPlotNatureHoperator']=True              # Plot the nature run and the observation operator
+NatureConf['NPlot']=50
+NatureConf['RunPlotNatureHoperator']=False              # Plot the nature run and the observation operator
 NatureConf['RunPlotNatureObsGIF']=True                 # Plot the nature run and the observations in a gif
 #=============================================================================#
 #                            OBSERVATIONS SECTION                             #
@@ -90,7 +90,7 @@ ObsConf['TimeDensity']=1                               # Observation density in 
 #Set the diagonal of R
 ObsConf['Error']=1 #np.array([0.9, 1, 1.1])               # Constant observation error.
 ObsConf['Bias']=0.0                                    # Constant Systematic observation error.
-ObsConf['Type']=1                                      # Observation type (1 observe x, 2 observe x**2)
+ObsConf['Type']=3                                      # Observation type (1 observe x, 2 observe x**2, 3 radar)
 
 #=================================================================
 #  DATA ASSIMILATION SECTION :
