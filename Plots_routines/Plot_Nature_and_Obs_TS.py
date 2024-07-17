@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import numpy as np
-import matplotlib.pyplot as plt
 import imageio
 import os
+import numpy as np
+import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from matplotlib.collections import LineCollection
+from matplotlib.colors import Normalize
 
 def polar_twin(ax):
     ax2 = ax.figure.add_axes(ax.get_position(), projection='polar', 
@@ -15,15 +17,31 @@ def polar_twin(ax):
     ax2._r_label_position._t = (22.5 + 180, 0.0)
     ax2._r_label_position.invalidate()
 
-    # Bit of a hack to ensure that the original axes tick labels are on top of
+    # Ensure that the original axes tick labels are on top of
     # whatever is plotted in the twinned axes. Tick labels will be drawn twice.
-    for label in ax.get_yticklabels():
-        ax.figure.texts.append(label)
-    ax2.set_ylim([0, 60])
+    ax2.set_ylim([-20, 60])
+    ax2.set_rorigin(-30)
+    ax2.set_rticks(np.arange(0, 61, 10))
     plt.setp(ax2.get_yticklabels(), color='darkgreen')
     return ax2
 
-def plot_for_image(data_in, obs_in, idx_obs_in, tobs_in, hradar):
+def plot_colored_line(ax, theta, r, cmap, norm):
+    points = np.array([theta, r]).T.reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+    
+    # Create the LineCollection for the colored lines
+    lc_colored = LineCollection(segments, cmap=cmap, norm=norm, linewidth=2.5)
+    lc_colored.set_array(r)
+    
+    # Create the LineCollection for the black edges
+    lc_edges = LineCollection(segments, colors='black', linewidth=3.0)
+
+    ax.add_collection(lc_edges)
+    ax.add_collection(lc_colored)
+    
+    return lc_colored
+
+def plot_for_image(data_in, obs_in, idx_obs_in, tobs_in, hradar, line_colorbar, scatter_colorbar):
     # Data for plotting
     data = np.append(data_in, data_in[0])
     obs = np.append(obs_in, obs_in[0])
@@ -31,34 +49,44 @@ def plot_for_image(data_in, obs_in, idx_obs_in, tobs_in, hradar):
     data_size = np.shape(data)[0]
     theta = np.linspace(0, 2 * np.pi, data_size)
     
-    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'projection': 'polar'})
+    fig, ax = plt.subplots(figsize=(8, 9), subplot_kw={'projection': 'polar'})
+    fig.subplots_adjust(top=0.99, bottom=0.15)
 
     ax.set_theta_zero_location('N')
     ax.set_theta_direction(-1)
     ax.set_rlabel_position(90)
-    ax.legend(loc="upper left", bbox_to_anchor=(0.9, 1.05))
     ax.set_xticks(theta[:-1])
     ax.set_xticklabels([int(i) for i in np.arange(1, data_size)])
     
     ax.set_title(f'Time {tobs_in:.3f}', fontsize=16)
-    #ax.set_rmax(20)
-    #ax.set_rmin(-20)
     ax.set_ylim([-20, 20])
     ax.set_rorigin(-25)
     ax.set_rticks(np.arange(-15, 16, 5))
     ax.grid(True)
+    cmap = plt.get_cmap('RdBu_r')
+    norm =Normalize(vmin=-15, vmax=15)
+    line = plot_colored_line(ax, theta, data, cmap,norm)
+    #cax = inset_axes(ax, width="100%", height="5%", loc='lower center', borderpad=-5.0)
+    #cbar = fig.colorbar(line, cax=cax, orientation='horizontal')
+    #cbar.set_label('Nature Value')
 
-    ax.plot(theta, data, label='Nature', color='IndianRed', linewidth=2.5)
-    
+
+    cax = inset_axes(ax, width="100%", height="5%", loc='lower center', borderpad=-5.0)
+    line_cb = fig.colorbar(line, cax=cax, orientation='horizontal')
+    line_cb.set_label('Nature Value')
+
     if hradar:
         ax2 = polar_twin(ax)
-        scatter = ax2.scatter(theta[idx_obs], obs, label='Obs', c=obs, cmap='gist_ncar', linewidth=2.5)
+        obs_norm =Normalize(vmin=0, vmax=60)
+        cmap_radar = plt.get_cmap('gist_ncar')
+        scatter = ax2.scatter(theta[idx_obs], obs, label='Obs', c=obs, cmap=cmap_radar, linewidth=0.5, edgecolors='black', norm=obs_norm)
         
-        # Create an inset axis for the colorbar
-        cax = inset_axes(ax2, width="5%", height="50%", loc='upper right', borderpad=1)
-        fig.colorbar(scatter, cax=cax, orientation='vertical')
+        cax2 = inset_axes(ax2, width="100%", height="5%", loc='lower center', borderpad=-9.0)
+        scatter_cb = fig.colorbar(scatter, cax=cax2, orientation='horizontal')
+        scatter_cb.set_label('Obs Value')
+
     else:
-        ax.plot(theta[idx_obs], obs, label='Obs', color='SteelBlue', linewidth=2.5)
+        ax.plot(theta[idx_obs], obs, label='Obs', color='SteelBlue', linewidth=2.5, marker='o', markerfacecolor='SteelBlue', markeredgewidth=1.5, markeredgecolor='black')
 
     # Used to return the plot as an image array
     fig.canvas.draw()  # draw the canvas, cache the renderer
@@ -112,7 +140,7 @@ def plot_nature_and_obs(NatureDataPath, ModelConf, GeneralConf, ObsConf, NPlot):
     plt.close()
 
     plt.figure()
-    plt.plot(tmpobs[0, -NPlot:], 'o', alpha=0.8)
+    plt.plot(tmpobs[0, -NPlot:], 'o', alpha=0.8, markeredgewidth=1.5, markeredgecolor='black')
     plt.plot(XNature[0, 0, -NPlot:])
     plt.xlabel('Time')
     plt.ylabel('X at 1st grid point')
@@ -122,8 +150,8 @@ def plot_nature_and_obs(NatureDataPath, ModelConf, GeneralConf, ObsConf, NPlot):
     plt.close()
 
     plt.figure()
-    plt.plot(xobs[:, -1], tmpobs[:, -1], 'o', alpha=0.8)
-    plt.plot(np.arange(1, Nx + 1), XNature[:, 0, -1], '-o', alpha=0.8)
+    plt.plot(xobs[:, -1], tmpobs[:, -1], 'o', alpha=0.8, markeredgewidth=1.5, markeredgecolor='black')
+    plt.plot(np.arange(1, Nx + 1), XNature[:, 0, -1], '-o', alpha=0.8, markeredgewidth=1.5, markeredgecolor='black')
     plt.xlabel('Location')
     plt.ylabel('X at last time')
     plt.title('Nature and Observations')
@@ -132,5 +160,9 @@ def plot_nature_and_obs(NatureDataPath, ModelConf, GeneralConf, ObsConf, NPlot):
     plt.close()
     
     # Create gif with nature and observations
-    images = [plot_for_image(XNature[:, 0, i], tmpobs[:, i], xobs[:, i], ModelConf['dt'] * np.unique(tobs)[i], hradar) for i in range(NPlot)]
+    images = []
+    for i in range(NPlot):
+        img = plot_for_image(XNature[:, 0, i], tmpobs[:, i], xobs[:, i], ModelConf['dt'] * np.unique(tobs)[i], hradar)
+        images.append(img)
+        
     imageio.mimsave(FigPath + '/Nature_run_X.gif', images, fps=10)
