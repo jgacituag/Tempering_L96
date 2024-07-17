@@ -41,7 +41,7 @@ def plot_colored_line(ax, theta, r, cmap, norm):
     
     return lc_colored
 
-def plot_for_image(data_in, obs_in, idx_obs_in, tobs_in, hradar, line_colorbar, scatter_colorbar):
+def plot_for_image(data_in, obs_in, idx_obs_in, tobs_in, hradar):
     # Data for plotting
     data = np.append(data_in, data_in[0])
     obs = np.append(obs_in, obs_in[0])
