@@ -71,8 +71,8 @@ NatureConf['SPLength']=40                              # Spin up length in model
 NatureConf['Length']=1000                              # Nature run length in model time units (1 model time unit app. equivalent to 5 day time in the atmosphere)
 
 #Nature plots if NatureConf['RunPlot']=True
-NatureConf['NPlot']=50
-NatureConf['RunPlotNatureHoperator']=False              # Plot the nature run and the observation operator
+NatureConf['NPlot']=500
+NatureConf['RunPlotNatureHoperator']=True              # Plot the nature run and the observation operator
 NatureConf['RunPlotNatureObsGIF']=True                 # Plot the nature run and the observations in a gif
 #=============================================================================#
 #                            OBSERVATIONS SECTION                             #

@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plot_nature_and_hoperator(NatureDataPath,NPlot):
+def plot_nature_and_hoperator(NatureDataPath,FigPath,NPlot):
     Data = np.load(NatureDataPath,allow_pickle=True)
     XNature=Data['XNature']
     YObs=Data['YObs']
@@ -39,7 +39,7 @@ def plot_nature_and_hoperator(NatureDataPath,NPlot):
     plt.xlabel('Time')
     
     plt.tight_layout()
-    plt.savefig( './FigureNatureReflectivity.png', facecolor='w', format='png' )
+    plt.savefig( FigPath + '/FigureNatureReflectivity.png', facecolor='w', format='png' )
     plt.show(block=False)
     plt.close()
 
