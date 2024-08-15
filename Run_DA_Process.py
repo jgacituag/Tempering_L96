@@ -191,7 +191,7 @@ def run_da(GeneralConf,ModelConf,DAConf,ObsConf):
         da_window_end    = da_window_start + DAConf['Freq']
         da_analysis_time = da_window_end
 
-        #Screen the observations and get only the onew within the da window
+        #Screen the observations and get only the one within the da window
         window_mask=np.logical_and( ObsLoc[:,1] > da_window_start , ObsLoc[:,1] <= da_window_end )
 
         ObsLocW=ObsLoc[window_mask,:]                                     #Observation location within the DA window.

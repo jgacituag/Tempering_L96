@@ -9,6 +9,7 @@ from GeneralFuntions import generate_combinations
 from GeneralFuntions import save_configurations
 from Run_Nature_Process import run_nature_process
 from Run_DA_Process import run_da_process
+from Run_Forecast_Process import run_forecast_process
 from Run_Plot_Process import run_plot_process
 
 def main():
@@ -60,8 +61,11 @@ def run_single_experiment(config, combo=None):
         run_nature_process(config)
     if config.GeneralConf['RunDA']:
         run_da_process(config)
+    if config.GeneralConf['RunForecast']:
+        run_forecast_process(config)
     if config.GeneralConf['RunPlots']:
         run_plot_process(config)
+        
 
 if __name__ == "__main__":
     main()

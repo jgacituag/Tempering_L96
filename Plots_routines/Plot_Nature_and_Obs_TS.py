@@ -88,6 +88,7 @@ def plot_for_image(data_in, obs_in, idx_obs_in, tobs_in, hradar):
                                         cax = cax2, orientation = 'horizontal',spacing = 'uniform',
                                         ticks = np.arange(0, 61, 10))
         scatter_colorbar.set_label('Obs Value', fontsize=12, color='DarkGreen', fontweight='bold')
+        
     else:
         ax.plot(theta[idx_obs], obs, label='Obs', color='SteelBlue', linewidth=2.5, marker='o', markerfacecolor='SteelBlue', markeredgewidth=1.5, markeredgecolor='black')
 

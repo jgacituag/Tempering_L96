@@ -8,7 +8,7 @@ import os
 
 GeneralConf=dict()
 
-GeneralConf['ExpName'] ='test_experiment'                       # Experiment name
+GeneralConf['ExpName'] ='1000nens_linear'                       # Experiment name
 GeneralConf['GeneralPath'] = '/media/jgacitua/storage/Tempering_L96'
 GeneralConf['ExpPath'] = f"{GeneralConf['GeneralPath']}/{GeneralConf['ExpName']}"            # path to the experiment
 #GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/storage/Tempering_L96/Fortran_routines'               # path to the compiled fortran routines
@@ -17,7 +17,7 @@ GeneralConf['DataPath'] = f"{GeneralConf['ExpPath']}/DATA"
 GeneralConf['FiguresPath'] = f"{GeneralConf['ExpPath']}/FIGURES"
 GeneralConf['NewExperiment'] = True
 GeneralConf['RunNature'] = True
-GeneralConf['RunDA'] = False
+GeneralConf['RunDA'] = True
 GeneralConf['RunPlots'] = True
 GeneralConf['MultipleConfigurations'] = False
 GeneralConf['MultivalueVariables'] = [('ObsConf', 'SpaceDensity'), 
@@ -90,18 +90,18 @@ ObsConf['TimeDensity']=1                               # Observation density in 
 #Set the diagonal of R
 ObsConf['Error']=1 #np.array([0.9, 1, 1.1])               # Constant observation error.
 ObsConf['Bias']=0.0                                    # Constant Systematic observation error.
-ObsConf['Type']=3                                      # Observation type (1 observe x, 2 observe x**2, 3 radar)
+ObsConf['Type']=1                                      # Observation type (1 observe x, 2 observe x**2, 3 radar)
 
-#=================================================================
-#  DATA ASSIMILATION SECTION :
-#=================================================================
+#=============================================================================#
+#                         DATA ASSIMILATION SECTION                           #
+#=============================================================================#
 
 DAConf=dict()
 DAConf['RunSave']=True                                  # Save DA run
 DAConf['RunPlot']=True                                  # Plot DA run
 DAConf['DAFileName']='DA_' + GeneralConf['ExpName'] + '.npz'
 DAConf['ExpLength'] = 1000                              # None use the full nature run experiment. Else use this length.
-DAConf['NEns'] = 30                                     # Number of ensemble members
+DAConf['NEns'] = 500                                     # Number of ensemble members
 DAConf['Twin'] = True                                   # When True, model configuration will be replaced by the model configuration in the nature run.
 DAConf['Freq'] = 4                                      # Assimilation frequency (in number of time steps)
 DAConf['TSFreq'] = 4                                    # Intra window ensemble output frequency (for 4D Data assimilation)
@@ -117,3 +117,13 @@ DAConf['UpdateSmoothCoef']=0.0                          # Data assimilation upda
 DAConf['InitialPSigma']=np.array([0,0,0])               # Initial ensemble spread for the parameters. (0 means no parameter estimation)
 DAConf['GrossCheckFactor'] = 20.0                       # Gross check error threshold (observations associated with innovations greater than GrossCheckFactor * R**0.5 will be rejected).
 DAConf['LowDbzPerThresh']  = 1.01                       # If the percentage of ensemble members with reflectivity values == to the lower limit, then the observation is not assimilated [reflectivity obs only]
+
+
+#=============================================================================#
+#                              FORECAST SECTION                               #
+#=============================================================================#
+ForConf=dict()
+
+ForConf['FreqOut'] = 4                               #Forecast output frequency (in number of time steps)
+ForConf['ForecastLength'] = 4 * 50                   #Maximum forecast lead time (in number of time steps)
+ForConf['AnalysisSpinUp'] = 400                      #Analysis cycles to skip befor running the first forecast.
