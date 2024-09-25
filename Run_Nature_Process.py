@@ -89,7 +89,7 @@ def save_output(GeneralConf, NatureConf,ModelConf, ObsConf, XNature, XSSNature, 
     if NatureConf['RunSave']:
         FNature = DFNature + RFNature + SSFNature
         
-        filename = os.path.join(ErrorlConf['DataPath'], NatureConf['NatureFileName'])
+        filename = os.path.join(GeneralConf['DataPath'], NatureConf['NatureFileName'])
         logging.info('Saving the output to ' + filename)
         start = time.time()
 

@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import imageio
 import time
-sys.path.append("/media/jgacitua/storage/Tempering_L96/Plots_routines/")
+sys.path.append("/media/jgacitua/Backup/Tempering_L96/Plots_routines/")
 
 def run_plot_process(conf):
     GeneralConf = conf.GeneralConf

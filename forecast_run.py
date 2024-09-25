@@ -11,7 +11,7 @@ import sys
 sys.path.append(f"/media/jgacitua/storage/DABA/Lorenz_96/model/")
 sys.path.append(f"/media/jgacitua/storage/DABA/Lorenz_96/data_assimilation/")
 
-from model  import lorenzn  as model          #Import the model (fortran routines)
+from model import lorenzn  as model          #Import the model (fortran routines)
 
 
 import matplotlib.pyplot as plt

@@ -266,7 +266,7 @@ def save_output(DAout, ModelConf, DAConf, ObsConf,GeneralConf):
              ModelConf = ModelConf   , DAConf = DAConf, GeneralConf = GeneralConf, ObsConf = ObsConf)
     logging.info(f'Saving took {time.time() - start} seconds.')
 
-def run_da_process(conf):
+def run_plot_process(conf):
     GeneralConf = conf.GeneralConf
     DAConf = conf.DAConf
     ModelConf = conf.ModelConf

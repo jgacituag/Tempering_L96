@@ -8,16 +8,16 @@ import os
 
 GeneralConf=dict()
 
-GeneralConf['ExpName'] ='1000nens_linear'                       # Experiment name
-GeneralConf['GeneralPath'] = '/media/jgacitua/storage/Tempering_L96'
+GeneralConf['ExpName'] ='40nens_hradar'                       # Experiment name
+GeneralConf['GeneralPath'] = '/media/jgacitua/Backup/Tempering_L96'
 GeneralConf['ExpPath'] = f"{GeneralConf['GeneralPath']}/{GeneralConf['ExpName']}"            # path to the experiment
-#GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/storage/Tempering_L96/Fortran_routines'               # path to the compiled fortran routines
-GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/storage/DABA/Lorenz_96/'
+GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/Backup/Tempering_L96/Fortran_routines'               # path to the compiled fortran routines
+#GeneralConf['FortranRoutinesPath'] = '/media/jgacitua/Backup/Tempering_L96/'
 GeneralConf['DataPath'] = f"{GeneralConf['ExpPath']}/DATA"
 GeneralConf['FiguresPath'] = f"{GeneralConf['ExpPath']}/FIGURES"
 GeneralConf['NewExperiment'] = True
 GeneralConf['RunNature'] = True
-GeneralConf['RunDA'] = True
+GeneralConf['RunDA'] = False
 GeneralConf['RunPlots'] = True
 GeneralConf['MultipleConfigurations'] = False
 GeneralConf['MultivalueVariables'] = [('ObsConf', 'SpaceDensity'), 
@@ -71,7 +71,7 @@ NatureConf['SPLength']=40                              # Spin up length in model
 NatureConf['Length']=1000                              # Nature run length in model time units (1 model time unit app. equivalent to 5 day time in the atmosphere)
 
 #Nature plots if NatureConf['RunPlot']=True
-NatureConf['NPlot']=500
+NatureConf['NPlot']=40
 NatureConf['RunPlotNatureHoperator']=True              # Plot the nature run and the observation operator
 NatureConf['RunPlotNatureObsGIF']=True                 # Plot the nature run and the observations in a gif
 #=============================================================================#
@@ -90,7 +90,7 @@ ObsConf['TimeDensity']=1                               # Observation density in 
 #Set the diagonal of R
 ObsConf['Error']=1 #np.array([0.9, 1, 1.1])               # Constant observation error.
 ObsConf['Bias']=0.0                                    # Constant Systematic observation error.
-ObsConf['Type']=1                                      # Observation type (1 observe x, 2 observe x**2, 3 radar)
+ObsConf['Type']=3                                      # Observation type (1 observe x, 2 observe x**2, 3 radar)
 
 #=============================================================================#
 #                         DATA ASSIMILATION SECTION                           #
