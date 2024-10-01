@@ -7,11 +7,23 @@ import logging
 import numpy as np
 import experiment_config as expconf
 sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/model/")
-sys.path.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/data_assimilation/")
+sys.pa.append(f"{expconf.GeneralConf['FortranRoutinesPath']}/data_assimilation/")
 from model import lorenzn as model          #Import the model (fortran routines)
 from obsope import common_obs as hoperator  #Import the observation operator (fortran routines)
 from da import common_da_tools as das       #Import the data assimilation routines (fortran routines)
 
+
+def get_temp_steps( NTemp , Alpha ) :
+    
+   #NTemp is the number of tempering steps to be performed.
+   #Alpha is a slope coefficient. Larger alpha means only a small part of the information
+   #will be assimilated in the first step (and the largest part will be assimilated in the last step).
+
+   dt=1.0/float(NTemp+1)
+   steps = np.exp( 1.0 * Alpha / np.arange( dt , 1.0-dt/100.0 , dt ) )
+   steps = steps / np.sum(steps)
+
+   return steps 
 
 def inflation( ensemble_post , ensemble_prior , nature , inf_coefs )  :
 
